@@ -172,23 +172,31 @@ local function get_highlight_group(status_code, is_directory)
 	return nil, nil
 end
 
--- Store match IDs to clear only our highlights
-local git_match_ids = {}
+-- Store extmarks for proper cleanup
+local highlight_namespace = vim.api.nvim_create_namespace("oil_git_highlights")
+local symbol_namespace = vim.api.nvim_create_namespace("oil_git_symbols")
 
 local function clear_highlights()
-	-- clear our tracked match IDs
-	for i, match_id in ipairs(git_match_ids) do
-		pcall(vim.fn.matchdelete, match_id)
-	end
-	git_match_ids = {}
-
-	-- Clear existing virtual text from our namespace
-	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
+	-- Clear highlights from current buffer
 	local bufnr = vim.api.nvim_get_current_buf()
 	if vim.api.nvim_buf_is_valid(bufnr) then
-		vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+		-- Clear all our highlights and symbols using namespaces
+		vim.api.nvim_buf_clear_namespace(bufnr, highlight_namespace, 0, -1)
+		vim.api.nvim_buf_clear_namespace(bufnr, symbol_namespace, 0, -1)
+		
+		-- Also clear any window-local matches (fallback for old highlights)
+		pcall(vim.fn.clearmatches)
 	end
-	debug_log("*** CLEAR_HIGHLIGHTS completed - all highlights wiped")
+	
+	-- Also clear from all oil buffers to prevent leftover highlights
+	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].filetype == "oil" then
+			vim.api.nvim_buf_clear_namespace(buf, highlight_namespace, 0, -1)
+			vim.api.nvim_buf_clear_namespace(buf, symbol_namespace, 0, -1)
+		end
+	end
+	
+	debug_log("*** CLEAR_HIGHLIGHTS completed - all highlights wiped from all oil buffers")
 end
 
 -- Simple hash function for change detection
@@ -278,8 +286,7 @@ local function apply_git_highlights()
 	-- ALWAYS clear all highlights first to ensure clean state
 	clear_highlights()
 
-	-- Get namespace once and reuse
-	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
+	-- Process each line for git status highlighting
 
 	for i, line in ipairs(lines) do
 		local entry = oil.get_entry_on_line(bufnr, i)
@@ -301,65 +308,89 @@ local function apply_git_highlights()
 			local hl_group, symbol = get_highlight_group(status_code, is_directory)
 
 			if hl_group and symbol then
-				-- Find the entry name in the line and highlight it
-				-- Handle files with spaces by trying multiple approaches
-				local name_start = nil
+				debug_log("Processing entry: '" .. entry.name .. "' in line: '" .. line .. "'")
 				
-				-- First try: exact match (works for files without spaces)
-				name_start = line:find(entry.name, 1, true)
+				-- Use a more robust approach to find and highlight filenames
+				-- This works regardless of how oil formats the filename (with or without quotes, spaces, etc.)
 				
-				-- Second try: look for quoted version (oil might quote files with spaces)
-				if not name_start then
-					local quoted_name = '"' .. entry.name .. '"'
-					name_start = line:find(quoted_name, 1, true)
-					if name_start then
-						-- Adjust to highlight just the filename, not the quotes
-						name_start = name_start + 1
+				-- Try to find the actual filename boundaries for more precise highlighting
+				local name_start, name_end = nil, nil
+				
+				-- Method 1: Look for the filename exactly as oil displays it
+				local display_patterns = {
+					entry.name,  -- exact match
+					'"' .. entry.name .. '"',  -- quoted
+					"'" .. entry.name .. "'",  -- single quoted
+				}
+				
+				for _, pattern in ipairs(display_patterns) do
+					local start_pos = line:find(pattern, 1, true)
+					if start_pos then
+						name_start = start_pos
+						name_end = start_pos + #pattern - 1
+						-- If quoted, adjust to highlight just the filename
+						if pattern:sub(1,1) == '"' or pattern:sub(1,1) == "'" then
+							name_start = name_start + 1
+							name_end = name_end - 1
+						end
+						break
 					end
 				end
 				
-				-- Third try: escape special characters and use pattern matching
+				-- Method 2: If exact match fails, use oil's column information
 				if not name_start then
-					local escaped_name = entry.name:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
-					name_start = line:find(escaped_name)
-				end
-				
-				-- Fourth try: fallback for complex cases
-				if not name_start then
+					-- Oil typically shows files in a consistent column layout
+					-- Find the first non-whitespace character (skip icons)
 					local content_start = line:find("%S")
-					if content_start and line:find(entry.name:gsub(" ", ".*")) then
-						name_start = content_start
-					end
-				end
-				if name_start then
-					-- For directories, include the trailing slash in the highlight
-					local highlight_length = #entry.name
-					if is_directory then
-						-- Check if there's a trailing slash after the directory name
-						local slash_pos = name_start + #entry.name
-						if slash_pos <= #line and line:sub(slash_pos, slash_pos) == "/" then
-							highlight_length = highlight_length + 1
+					if content_start then
+						-- Look for filename-like content starting from there
+						local filename_pattern = "[%w%s%.%-_]+"
+						local match_start, match_end = line:find(filename_pattern, content_start)
+						if match_start and line:sub(match_start, match_end):find(entry.name:gsub(" ", ".*")) then
+							name_start = match_start
+							name_end = match_end
 						end
 					end
-
-					-- Highlight the entry name (and trailing slash for directories) and store match ID
-					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, highlight_length } })
-					if match_id > 0 then
-						table.insert(git_match_ids, match_id)
+				end
+				
+				-- Method 3: Fallback - highlight from first non-space to end of visible content
+				if not name_start then
+					local content_start = line:find("%S")
+					local content_end = line:find("%s*$") - 1
+					if content_start and content_end >= content_start then
+						name_start = content_start
+						name_end = content_end
 					end
-
+				end
+				
+				-- Apply highlighting using extmarks (more reliable than matchaddpos)
+				if name_start and name_end then
+					local col_start = name_start - 1  -- 0-indexed for extmarks
+					local col_end = name_end  -- exclusive end
+					
+					-- For directories, try to include trailing slash
+					if is_directory and name_end < #line and line:sub(name_end + 1, name_end + 1) == "/" then
+						col_end = col_end + 1
+					end
+					
+					debug_log(string.format("Highlighting '%s' from col %d to %d", entry.name, col_start, col_end))
+					
+					-- Use extmarks for highlighting (more reliable cleanup)
+					pcall(vim.api.nvim_buf_set_extmark, bufnr, highlight_namespace, i - 1, col_start, {
+						end_col = col_end,
+						hl_group = hl_group,
+						priority = 100,  -- Higher priority to override other highlights
+					})
+					
 					-- Add symbol as virtual text at the end of the line
-					-- Use pcall to prevent errors from causing redraws
-					pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, i - 1, 0, {
+					pcall(vim.api.nvim_buf_set_extmark, bufnr, symbol_namespace, i - 1, 0, {
 						virt_text = { { " " .. symbol, hl_group } },
 						virt_text_pos = "eol",
 						hl_mode = "combine",
-						-- Add strict invalidation to prevent stale extmarks
-						invalidate = true,
+						priority = 100,
 					})
 				else
-					-- Debug: log when we can't find the filename
-					debug_log("Could not find filename '" .. entry.name .. "' in line: " .. line)
+					debug_log("Could not determine highlight position for: '" .. entry.name .. "' in line: '" .. line .. "'")
 				end
 			end
 		end
