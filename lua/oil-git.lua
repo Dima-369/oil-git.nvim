@@ -242,12 +242,6 @@ local function apply_git_highlights()
 		return
 	end
 	
-	-- Quick check: if we're in the same directory and had no git status before, skip entirely
-	if last_refresh_state.dir == current_dir and 
-	   last_refresh_state.git_status_hash == simple_hash({}) then
-		debug_log("same directory with no previous git status - skipping entirely to prevent cursor blink")
-		return
-	end
 
 	debug_log("current_dir: " .. current_dir)
 	local git_status = get_git_status(current_dir)
