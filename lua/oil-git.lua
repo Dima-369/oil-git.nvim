@@ -8,25 +8,25 @@ local default_highlights = {
 	OilGitUntracked = { fg = "#89b4fa" },
 	OilGitIgnored = { fg = "#6c7086" },
 	-- Directory highlights (slightly dimmed versions)
-	OilGitDirAdded = { fg = "#a6e3a1", italic = true },
-	OilGitDirModified = { fg = "#f9e2af", italic = true },
-	OilGitDirRenamed = { fg = "#cba6f7", italic = true },
-	OilGitDirUntracked = { fg = "#89b4fa", italic = true },
-	OilGitDirIgnored = { fg = "#6c7086", italic = true },
+	OilGitDirAdded = { fg = "#a6e3a1" },
+	OilGitDirModified = { fg = "#f9e2af" },
+	OilGitDirRenamed = { fg = "#cba6f7" },
+	OilGitDirUntracked = { fg = "#89b4fa" },
+	OilGitDirIgnored = { fg = "#6c7086" },
 }
 
 -- Debouncing variables
 local refresh_timer = nil
 local DEBOUNCE_MS = 50
 local last_refresh_time = 0
-local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
+local MIN_REFRESH_INTERVAL = 200 -- Minimum 200ms between actual refreshes
 
 -- Periodic refresh for external changes (disabled by default to prevent cursor blinking)
 local periodic_timer = nil
-local PERIODIC_REFRESH_MS = nil  -- Disabled by default
+local PERIODIC_REFRESH_MS = nil -- Disabled by default
 
 -- Redraw strategy for cursor blinking control
-local REDRAW_STRATEGY = "gentle"  -- "gentle", "immediate", "none"
+local REDRAW_STRATEGY = "gentle" -- "gentle", "immediate", "none"
 
 -- Cache to prevent unnecessary refreshes
 local last_refresh_state = {
@@ -108,33 +108,33 @@ end
 local function get_directory_status(dir_path, git_status)
 	local dir_path_normalized = dir_path:gsub("/$", "") .. "/"
 	local status_priority = {
-		["A"] = 4,  -- Added (highest priority)
-		["M"] = 3,  -- Modified
-		["R"] = 2,  -- Renamed
-		["?"] = 1,  -- Untracked
-		["!"] = 0,  -- Ignored (lowest priority)
+		["A"] = 4, -- Added (highest priority)
+		["M"] = 3, -- Modified
+		["R"] = 2, -- Renamed
+		["?"] = 1, -- Untracked
+		["!"] = 0, -- Ignored (lowest priority)
 	}
-	
+
 	local highest_priority = -1
 	local highest_status = nil
-	
+
 	for filepath, status_code in pairs(git_status) do
 		-- Check if this file is within the directory
 		if filepath:sub(1, #dir_path_normalized) == dir_path_normalized then
 			local first_char = status_code:sub(1, 1)
 			local second_char = status_code:sub(2, 2)
-			
+
 			-- Check both staged and unstaged changes
-			for _, char in ipairs({first_char, second_char}) do
+			for _, char in ipairs({ first_char, second_char }) do
 				local priority = status_priority[char]
 				if priority and priority > highest_priority then
 					highest_priority = priority
-					highest_status = char .. char  -- Convert single char to status code format
+					highest_status = char .. char -- Convert single char to status code format
 				end
 			end
 		end
 	end
-	
+
 	return highest_status
 end
 
@@ -145,7 +145,7 @@ local function get_highlight_group(status_code, is_directory)
 
 	local first_char = status_code:sub(1, 1)
 	local second_char = status_code:sub(2, 2)
-	
+
 	local prefix = is_directory and "OilGitDir" or "OilGit"
 
 	-- Check staged changes first (prioritize staged over unstaged)
@@ -180,10 +180,10 @@ local git_match_ids = {}
 
 local function clear_highlights()
 	debug_log("*** CLEAR_HIGHLIGHTS called - wiping ALL highlights")
-	
+
 	-- Clear ALL match highlights in the buffer (more thorough)
 	pcall(vim.fn.clearmatches)
-	
+
 	-- Also clear our tracked match IDs
 	for i, match_id in ipairs(git_match_ids) do
 		pcall(vim.fn.matchdelete, match_id)
@@ -213,21 +213,27 @@ end
 local function should_refresh(current_dir, git_status, buffer_lines)
 	local git_hash = simple_hash(git_status)
 	local lines_hash = simple_hash(buffer_lines)
-	
+
 	local dir_changed = last_refresh_state.dir ~= current_dir
 	local git_changed = last_refresh_state.git_status_hash ~= git_hash
 	local lines_changed = last_refresh_state.buffer_lines_hash ~= lines_hash
-	
+
 	if dir_changed or git_changed or lines_changed then
-		debug_log(string.format("should_refresh: YES (dir:%s git:%s lines:%s)", 
-			tostring(dir_changed), tostring(git_changed), tostring(lines_changed)))
-		
+		debug_log(
+			string.format(
+				"should_refresh: YES (dir:%s git:%s lines:%s)",
+				tostring(dir_changed),
+				tostring(git_changed),
+				tostring(lines_changed)
+			)
+		)
+
 		last_refresh_state.dir = current_dir
 		last_refresh_state.git_status_hash = git_hash
 		last_refresh_state.buffer_lines_hash = lines_hash
 		return true
 	end
-	
+
 	debug_log("should_refresh: NO - no changes detected")
 	return false
 end
@@ -243,7 +249,6 @@ local function apply_git_highlights()
 		last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
 		return
 	end
-	
 
 	debug_log("current_dir: " .. current_dir)
 	local git_status = get_git_status(current_dir)
@@ -264,28 +269,27 @@ local function apply_git_highlights()
 	debug_log("*** Getting buffer info - POTENTIAL CURSOR BLINK!")
 	local bufnr = vim.api.nvim_get_current_buf()
 	debug_log("Buffer number: " .. bufnr)
-	
+
 	-- Validate buffer is still valid and is an oil buffer
 	debug_log("Validating buffer...")
 	if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "oil" then
 		debug_log("invalid buffer or not oil filetype")
 		return
 	end
-	
+
 	debug_log("Getting buffer lines - POTENTIAL CURSOR BLINK!")
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	debug_log("Got " .. #lines .. " lines from buffer")
-	
 
 	debug_log("applying highlights - always wiping and reapplying all")
-	
+
 	-- Save cursor position to restore later
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
 	local view = vim.fn.winsaveview()
-	
+
 	-- Disable redraw during highlight operations
-	vim.cmd('set lazyredraw')
-	
+	vim.cmd("set lazyredraw")
+
 	-- ALWAYS clear all highlights first to ensure clean state
 	clear_highlights()
 
@@ -297,7 +301,7 @@ local function apply_git_highlights()
 		if entry then
 			local status_code = nil
 			local is_directory = entry.type == "directory"
-			
+
 			if entry.type == "file" then
 				-- For files, check direct git status
 				local filepath = current_dir .. entry.name
@@ -324,7 +328,7 @@ local function apply_git_highlights()
 							highlight_length = highlight_length + 1
 						end
 					end
-					
+
 					-- Highlight the entry name (and trailing slash for directories) and store match ID
 					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, highlight_length } })
 					if match_id > 0 then
@@ -343,24 +347,24 @@ local function apply_git_highlights()
 			end
 		end
 	end
-	
+
 	-- Restore cursor position and view
 	pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
 	pcall(vim.fn.winrestview, view)
-	
+
 	-- Re-enable redraw with configurable strategy
-	vim.cmd('set nolazyredraw')
-	
+	vim.cmd("set nolazyredraw")
+
 	-- Apply redraw strategy based on configuration
 	if REDRAW_STRATEGY == "immediate" then
 		debug_log("*** REDRAW: immediate - WILL CAUSE CURSOR BLINK!")
-		vim.cmd('redraw!')
+		vim.cmd("redraw!")
 	elseif REDRAW_STRATEGY == "gentle" then
 		debug_log("*** REDRAW: gentle - scheduling redraw")
 		-- Schedule redraw to next event loop to minimize cursor blinking
 		vim.schedule(function()
 			debug_log("*** REDRAW: gentle - executing scheduled redraw - CURSOR BLINK!")
-			vim.cmd('redraw!')
+			vim.cmd("redraw!")
 		end)
 	elseif REDRAW_STRATEGY == "none" then
 		debug_log("*** REDRAW: none - no forced redraw")
@@ -376,26 +380,26 @@ local function check_git_changes_only()
 	debug_log("Getting oil.get_current_dir() - POTENTIAL CURSOR BLINK!")
 	local current_dir = oil.get_current_dir()
 	debug_log("Got current_dir: " .. (current_dir or "nil"))
-	
+
 	if not current_dir then
 		debug_log("No current_dir, returning false")
 		return false
 	end
-	
+
 	debug_log("Calling get_git_status() - POTENTIAL CURSOR BLINK!")
 	local git_status = get_git_status(current_dir)
 	debug_log("Got git_status with " .. vim.tbl_count(git_status) .. " entries")
-	
+
 	debug_log("Calling simple_hash() - POTENTIAL CURSOR BLINK!")
 	local git_hash = simple_hash(git_status)
 	debug_log("Got git_hash: " .. git_hash)
-	
+
 	-- Only return true if git status actually changed
 	if last_refresh_state.git_status_hash ~= git_hash then
 		debug_log("periodic check: git status changed")
 		return true
 	end
-	
+
 	debug_log("periodic check: no git changes")
 	return false
 end
@@ -414,7 +418,7 @@ local function start_periodic_refresh()
 	if periodic_timer or not PERIODIC_REFRESH_MS then
 		return -- Already running or disabled
 	end
-	
+
 	debug_log("starting periodic refresh timer")
 	periodic_timer = vim.fn.timer_start(PERIODIC_REFRESH_MS, function()
 		if vim.bo.filetype == "oil" then
@@ -434,19 +438,19 @@ end
 local function debounced_refresh(source)
 	source = source or "unknown"
 	debug_log("debounced_refresh called from: " .. source)
-	
+
 	-- Check cooldown period to prevent rapid-fire refreshes
 	local current_time = vim.loop.now()
 	if current_time - last_refresh_time < MIN_REFRESH_INTERVAL then
 		debug_log("skipping refresh - within cooldown period")
 		return
 	end
-	
+
 	if refresh_timer then
 		debug_log("stopping existing timer")
 		vim.fn.timer_stop(refresh_timer)
 	end
-	
+
 	refresh_timer = vim.fn.timer_start(DEBOUNCE_MS, function()
 		refresh_timer = nil
 		last_refresh_time = vim.loop.now()
@@ -539,7 +543,7 @@ local function initialize()
 	if initialized then
 		return
 	end
-	
+
 	-- Clean up any existing timers from previous initialization
 	if refresh_timer then
 		vim.fn.timer_stop(refresh_timer)
@@ -549,7 +553,7 @@ local function initialize()
 		vim.fn.timer_stop(periodic_timer)
 		periodic_timer = nil
 	end
-	
+
 	setup_highlights()
 	setup_autocmds()
 	initialized = true
@@ -567,17 +571,17 @@ function M.setup(opts)
 	if opts.periodic_refresh_ms then
 		PERIODIC_REFRESH_MS = opts.periodic_refresh_ms
 	end
-	
+
 	-- Legacy option for explicit disabling
 	if opts.disable_periodic_refresh then
 		PERIODIC_REFRESH_MS = nil
 	end
-	
+
 	-- Allow enabling debug logging
-	if opts.debug ~= nil then
-		DEBUG = opts.debug
+	if opts.debug then
+		DEBUG = true
 	end
-	
+
 	-- Allow customizing redraw strategy
 	if opts.redraw_strategy then
 		REDRAW_STRATEGY = opts.redraw_strategy
@@ -603,19 +607,19 @@ end
 -- Force immediate git status update (bypasses debouncing and cooldowns)
 function M.force_update()
 	debug_log("force_update called - bypassing all debouncing")
-	
+
 	-- Cancel any pending timers
 	if refresh_timer then
 		vim.fn.timer_stop(refresh_timer)
 		refresh_timer = nil
 	end
-	
+
 	-- Reset cooldown to allow immediate refresh
 	last_refresh_time = 0
-	
+
 	-- Clear cache to force refresh
 	last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
-	
+
 	-- Apply highlights immediately
 	apply_git_highlights()
 end
