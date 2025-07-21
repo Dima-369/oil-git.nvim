@@ -1,3 +1,0 @@
-# 
-
-Highlight directories ooo
