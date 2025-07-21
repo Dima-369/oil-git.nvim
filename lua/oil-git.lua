@@ -12,6 +12,8 @@ local default_highlights = {
 -- Debouncing variables
 local refresh_timer = nil
 local DEBOUNCE_MS = 50
+local last_refresh_time = 0
+local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
 
 -- Cache to prevent unnecessary refreshes
 local last_refresh_state = {
@@ -21,7 +23,7 @@ local last_refresh_state = {
 }
 
 -- Debug flag - set to true to enable logging
-local DEBUG = true
+local DEBUG = false
 
 local function debug_log(msg, level)
 	if DEBUG then
@@ -254,6 +256,13 @@ local function debounced_refresh(source)
 	source = source or "unknown"
 	debug_log("debounced_refresh called from: " .. source)
 	
+	-- Check cooldown period to prevent rapid-fire refreshes
+	local current_time = vim.loop.now()
+	if current_time - last_refresh_time < MIN_REFRESH_INTERVAL then
+		debug_log("skipping refresh - within cooldown period")
+		return
+	end
+	
 	if refresh_timer then
 		debug_log("stopping existing timer")
 		vim.fn.timer_stop(refresh_timer)
@@ -261,6 +270,7 @@ local function debounced_refresh(source)
 	
 	refresh_timer = vim.fn.timer_start(DEBOUNCE_MS, function()
 		refresh_timer = nil
+		last_refresh_time = vim.loop.now()
 		debug_log("timer executing refresh from: " .. source)
 		-- Only refresh if we're still in an oil buffer
 		if vim.bo.filetype == "oil" then
@@ -329,10 +339,10 @@ local function setup_autocmds()
 		end,
 	})
 
-	-- Git-related user events
+	-- Git-related user events (removed GitSignsUpdate to prevent infinite loops)
 	vim.api.nvim_create_autocmd("User", {
 		group = group,
-		pattern = { "FugitiveChanged", "GitSignsUpdate", "LazyGitClosed" },
+		pattern = { "FugitiveChanged", "LazyGitClosed" },
 		callback = function(args)
 			if vim.bo.filetype == "oil" then
 				debounced_refresh("User:" .. args.match)
