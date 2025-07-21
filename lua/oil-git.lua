@@ -9,6 +9,10 @@ local default_highlights = {
 	OilGitIgnored = { fg = "#6c7086" },
 }
 
+-- Debouncing variables
+local refresh_timer = nil
+local DEBOUNCE_MS = 50
+
 local function setup_highlights()
 	-- Only set highlight if it doesn't already exist (respects colorscheme)
 	for name, opts in pairs(default_highlights) do
@@ -104,11 +108,15 @@ local function get_highlight_group(status_code)
 	return nil, nil
 end
 
+-- Store match IDs to clear only our highlights
+local git_match_ids = {}
+
 local function clear_highlights()
-	-- Clear existing git highlights and virtual text
-	for name, _ in pairs(default_highlights) do
-		vim.fn.clearmatches()
+	-- Clear only our specific git highlights
+	for _, match_id in ipairs(git_match_ids) do
+		pcall(vim.fn.matchdelete, match_id)
 	end
+	git_match_ids = {}
 
 	-- Clear existing virtual text
 	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
@@ -148,8 +156,9 @@ local function apply_git_highlights()
 				-- Find the filename part in the line and highlight it
 				local name_start = line:find(entry.name, 1, true)
 				if name_start then
-					-- Highlight the filename
-					vim.fn.matchaddpos(hl_group, { { i, name_start, #entry.name } })
+					-- Highlight the filename and store match ID
+					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, #entry.name } })
+					table.insert(git_match_ids, match_id)
 
 					-- Add symbol as virtual text at the end of the line
 					local ns_id = vim.api.nvim_create_namespace("oil_git_status")
@@ -163,61 +172,78 @@ local function apply_git_highlights()
 	end
 end
 
+-- Debounced refresh function to prevent excessive redraws
+local function debounced_refresh()
+	if refresh_timer then
+		vim.fn.timer_stop(refresh_timer)
+	end
+	
+	refresh_timer = vim.fn.timer_start(DEBOUNCE_MS, function()
+		refresh_timer = nil
+		-- Only refresh if we're still in an oil buffer
+		if vim.bo.filetype == "oil" then
+			apply_git_highlights()
+		end
+	end)
+end
+
 local function setup_autocmds()
 	local group = vim.api.nvim_create_augroup("OilGitStatus", { clear = true })
 
+	-- Initial refresh when entering oil buffer
 	vim.api.nvim_create_autocmd("BufEnter", {
 		group = group,
 		pattern = "oil://*",
-		callback = function()
-			vim.schedule(apply_git_highlights)
-		end,
+		callback = debounced_refresh,
 	})
 
 	-- Clear highlights when leaving oil buffers
 	vim.api.nvim_create_autocmd("BufLeave", {
 		group = group,
 		pattern = "oil://*",
-		callback = clear_highlights,
+		callback = function()
+			if refresh_timer then
+				vim.fn.timer_stop(refresh_timer)
+				refresh_timer = nil
+			end
+			clear_highlights()
+		end,
 	})
 
 	-- Refresh when oil buffer content changes (file operations)
-	vim.api.nvim_create_autocmd({ "BufWritePost", "TextChanged", "TextChangedI" }, {
+	vim.api.nvim_create_autocmd({ "BufWritePost", "TextChanged" }, {
 		group = group,
 		pattern = "oil://*",
-		callback = function()
-			vim.schedule(apply_git_highlights)
-		end,
+		callback = debounced_refresh,
 	})
 
-	-- Multiple events to catch lazygit closure
-	vim.api.nvim_create_autocmd({ "FocusGained", "WinEnter", "BufWinEnter" }, {
+	-- Focus events (consolidated to reduce redundancy)
+	vim.api.nvim_create_autocmd({ "FocusGained", "WinEnter" }, {
 		group = group,
 		pattern = "oil://*",
-		callback = function()
-			vim.schedule(apply_git_highlights)
-		end,
+		callback = debounced_refresh,
 	})
 
 	-- Terminal events (for when lazygit closes)
 	vim.api.nvim_create_autocmd("TermClose", {
 		group = group,
 		callback = function()
-			vim.schedule(function()
+			-- Use a longer delay for terminal close to avoid conflicts
+			vim.defer_fn(function()
 				if vim.bo.filetype == "oil" then
-					apply_git_highlights()
+					debounced_refresh()
 				end
-			end)
+			end, 100)
 		end,
 	})
 
-	-- Also catch common git-related user events
+	-- Git-related user events
 	vim.api.nvim_create_autocmd("User", {
 		group = group,
 		pattern = { "FugitiveChanged", "GitSignsUpdate", "LazyGitClosed" },
 		callback = function()
 			if vim.bo.filetype == "oil" then
-				vim.schedule(apply_git_highlights)
+				debounced_refresh()
 			end
 		end,
 	})
@@ -258,7 +284,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 -- Manual refresh function
 function M.refresh()
-	apply_git_highlights()
+	debounced_refresh()
 end
 
 return M
