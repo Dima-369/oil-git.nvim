@@ -582,7 +582,7 @@ function M.setup(opts)
 	if opts.debug then
 		DEBUG = true
 	end
-o
+
 	-- Allow customizing redraw strategy
 	if opts.redraw_strategy then
 		REDRAW_STRATEGY = opts.redraw_strategy
