@@ -21,9 +21,9 @@ local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
 
--- Periodic refresh for external changes
+-- Periodic refresh for external changes (disabled by default to prevent cursor blinking)
 local periodic_timer = nil
-local PERIODIC_REFRESH_MS = 3000  -- 3 seconds
+local PERIODIC_REFRESH_MS = nil  -- Disabled by default
 
 -- Redraw strategy for cursor blinking control
 local REDRAW_STRATEGY = "gentle"  -- "gentle", "immediate", "none"
@@ -36,7 +36,7 @@ local last_refresh_state = {
 }
 
 -- Debug flag - configurable via setup options
-local DEBUG = true
+local DEBUG = false
 
 local function debug_log(msg, level)
 	if DEBUG then
@@ -571,12 +571,12 @@ function M.setup(opts)
 		default_highlights = vim.tbl_extend("force", default_highlights, opts.highlights)
 	end
 
-	-- Allow customization of periodic refresh interval
+	-- Allow enabling periodic refresh (disabled by default due to cursor blinking)
 	if opts.periodic_refresh_ms then
 		PERIODIC_REFRESH_MS = opts.periodic_refresh_ms
 	end
 	
-	-- Allow disabling periodic refresh entirely
+	-- Legacy option for explicit disabling
 	if opts.disable_periodic_refresh then
 		PERIODIC_REFRESH_MS = nil
 	end
