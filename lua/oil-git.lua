@@ -36,7 +36,7 @@ local last_refresh_state = {
 }
 
 -- Debug flag - configurable via setup options
-local DEBUG = false
+local DEBUG = true
 
 local function debug_log(msg, level)
 	if DEBUG then
