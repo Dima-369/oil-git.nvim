@@ -274,11 +274,6 @@ local function apply_git_highlights()
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 	debug_log("Got " .. #lines .. " lines from buffer")
 	
-	-- Check if refresh is actually needed
-	if not should_refresh(current_dir, git_status, lines) then
-		debug_log("no refresh needed - content unchanged")
-		return -- Skip refresh if nothing changed
-	end
 
 	debug_log("applying highlights - content changed")
 	
