@@ -359,13 +359,13 @@ local function apply_git_highlights()
 	-- Apply redraw strategy based on configuration
 	if REDRAW_STRATEGY == "immediate" then
 		debug_log("*** REDRAW: immediate - WILL CAUSE CURSOR BLINK!")
-		vim.cmd("redraw!")
+		-- vim.cmd("redraw!")
 	elseif REDRAW_STRATEGY == "gentle" then
 		debug_log("*** REDRAW: gentle - scheduling redraw")
 		-- Schedule redraw to next event loop to minimize cursor blinking
 		vim.schedule(function()
 			debug_log("*** REDRAW: gentle - executing scheduled redraw - CURSOR BLINK!")
-			vim.cmd("redraw!")
+			-- vim.cmd("redraw!")
 		end)
 	elseif REDRAW_STRATEGY == "none" then
 		debug_log("*** REDRAW: none - no forced redraw")
@@ -405,36 +405,6 @@ local function check_git_changes_only()
 	return false
 end
 
--- Stop periodic refresh timer
-local function stop_periodic_refresh()
-	if periodic_timer then
-		debug_log("stopping periodic refresh timer")
-		vim.fn.timer_stop(periodic_timer)
-		periodic_timer = nil
-	end
-end
-
--- Start periodic refresh timer for external changes
-local function start_periodic_refresh()
-	if periodic_timer or not PERIODIC_REFRESH_MS then
-		return -- Already running or disabled
-	end
-
-	debug_log("starting periodic refresh timer")
-	periodic_timer = vim.fn.timer_start(PERIODIC_REFRESH_MS, function()
-		if vim.bo.filetype == "oil" then
-			debug_log("periodic refresh triggered")
-			-- Only refresh if git status actually changed
-			if check_git_changes_only() then
-				debounced_refresh("periodic")
-			end
-		else
-			debug_log("stopping periodic timer - not in oil buffer")
-			stop_periodic_refresh()
-		end
-	end, { ["repeat"] = -1 }) -- Repeat indefinitely
-end
-
 -- Debounced refresh function to prevent excessive redraws
 local function debounced_refresh(source)
 	source = source or "unknown"
@@ -463,6 +433,36 @@ local function debounced_refresh(source)
 			debug_log("skipping refresh - not in oil buffer")
 		end
 	end)
+end
+
+-- Stop periodic refresh timer
+local function stop_periodic_refresh()
+	if periodic_timer then
+		debug_log("stopping periodic refresh timer")
+		vim.fn.timer_stop(periodic_timer)
+		periodic_timer = nil
+	end
+end
+
+-- Start periodic refresh timer for external changes
+local function start_periodic_refresh()
+	if periodic_timer or not PERIODIC_REFRESH_MS then
+		return -- Already running or disabled
+	end
+
+	debug_log("starting periodic refresh timer")
+	periodic_timer = vim.fn.timer_start(PERIODIC_REFRESH_MS, function()
+		if vim.bo.filetype == "oil" then
+			debug_log("periodic refresh triggered")
+			-- Only refresh if git status actually changed
+			if check_git_changes_only() then
+				debounced_refresh("periodic")
+			end
+		else
+			debug_log("stopping periodic timer - not in oil buffer")
+			stop_periodic_refresh()
+		end
+	end, { ["repeat"] = -1 }) -- Repeat indefinitely
 end
 
 local function setup_autocmds()
