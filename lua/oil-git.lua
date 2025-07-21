@@ -371,6 +371,15 @@ local function check_git_changes_only()
 	return false
 end
 
+-- Stop periodic refresh timer
+local function stop_periodic_refresh()
+	if periodic_timer then
+		debug_log("stopping periodic refresh timer")
+		vim.fn.timer_stop(periodic_timer)
+		periodic_timer = nil
+	end
+end
+
 -- Start periodic refresh timer for external changes
 local function start_periodic_refresh()
 	if periodic_timer or not PERIODIC_REFRESH_MS then
@@ -390,15 +399,6 @@ local function start_periodic_refresh()
 			stop_periodic_refresh()
 		end
 	end, { ["repeat"] = -1 }) -- Repeat indefinitely
-end
-
--- Stop periodic refresh timer
-local function stop_periodic_refresh()
-	if periodic_timer then
-		debug_log("stopping periodic refresh timer")
-		vim.fn.timer_stop(periodic_timer)
-		periodic_timer = nil
-	end
 end
 
 -- Debounced refresh function to prevent excessive redraws
