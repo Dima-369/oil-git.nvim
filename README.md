@@ -1,5 +1,5 @@
 # oil-git.nvim
-oeu
+
 Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that shows git status by coloring file names and adding status symbols.
 
 ## Fork Improvements
