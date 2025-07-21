@@ -20,6 +20,15 @@ local last_refresh_state = {
 	buffer_lines_hash = nil,
 }
 
+-- Debug flag - set to true to enable logging
+local DEBUG = true
+
+local function debug_log(msg, level)
+	if DEBUG then
+		vim.notify("[oil-git] " .. msg, level or vim.log.levels.INFO)
+	end
+end
+
 local function setup_highlights()
 	-- Only set highlight if it doesn't already exist (respects colorscheme)
 	for name, opts in pairs(default_highlights) do
@@ -146,9 +155,13 @@ local function should_refresh(current_dir, git_status, buffer_lines)
 	local git_hash = simple_hash(git_status)
 	local lines_hash = simple_hash(buffer_lines)
 	
-	if last_refresh_state.dir ~= current_dir or
-	   last_refresh_state.git_status_hash ~= git_hash or
-	   last_refresh_state.buffer_lines_hash ~= lines_hash then
+	local dir_changed = last_refresh_state.dir ~= current_dir
+	local git_changed = last_refresh_state.git_status_hash ~= git_hash
+	local lines_changed = last_refresh_state.buffer_lines_hash ~= lines_hash
+	
+	if dir_changed or git_changed or lines_changed then
+		debug_log(string.format("should_refresh: YES (dir:%s git:%s lines:%s)", 
+			tostring(dir_changed), tostring(git_changed), tostring(lines_changed)))
 		
 		last_refresh_state.dir = current_dir
 		last_refresh_state.git_status_hash = git_hash
@@ -156,30 +169,37 @@ local function should_refresh(current_dir, git_status, buffer_lines)
 		return true
 	end
 	
+	debug_log("should_refresh: NO - no changes detected")
 	return false
 end
 
 local function apply_git_highlights()
+	debug_log("apply_git_highlights called")
 	local oil = require("oil")
 	local current_dir = oil.get_current_dir()
 
 	if not current_dir then
+		debug_log("no current_dir, clearing highlights")
 		clear_highlights()
 		last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
 		return
 	end
 
+	debug_log("current_dir: " .. current_dir)
 	local git_status = get_git_status(current_dir)
 	if vim.tbl_isempty(git_status) then
+		debug_log("no git status, clearing highlights")
 		clear_highlights()
 		last_refresh_state = { dir = current_dir, git_status_hash = simple_hash({}), buffer_lines_hash = nil }
 		return
 	end
 
+	debug_log("found " .. vim.tbl_count(git_status) .. " git status entries")
 	local bufnr = vim.api.nvim_get_current_buf()
 	
 	-- Validate buffer is still valid and is an oil buffer
 	if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "oil" then
+		debug_log("invalid buffer or not oil filetype")
 		return
 	end
 	
@@ -187,9 +207,11 @@ local function apply_git_highlights()
 	
 	-- Check if refresh is actually needed
 	if not should_refresh(current_dir, git_status, lines) then
+		debug_log("no refresh needed - content unchanged")
 		return -- Skip refresh if nothing changed
 	end
 
+	debug_log("applying highlights - content changed")
 	clear_highlights()
 
 	-- Get namespace once and reuse
@@ -228,16 +250,23 @@ local function apply_git_highlights()
 end
 
 -- Debounced refresh function to prevent excessive redraws
-local function debounced_refresh()
+local function debounced_refresh(source)
+	source = source or "unknown"
+	debug_log("debounced_refresh called from: " .. source)
+	
 	if refresh_timer then
+		debug_log("stopping existing timer")
 		vim.fn.timer_stop(refresh_timer)
 	end
 	
 	refresh_timer = vim.fn.timer_start(DEBOUNCE_MS, function()
 		refresh_timer = nil
+		debug_log("timer executing refresh from: " .. source)
 		-- Only refresh if we're still in an oil buffer
 		if vim.bo.filetype == "oil" then
 			apply_git_highlights()
+		else
+			debug_log("skipping refresh - not in oil buffer")
 		end
 	end)
 end
@@ -249,7 +278,9 @@ local function setup_autocmds()
 	vim.api.nvim_create_autocmd("BufEnter", {
 		group = group,
 		pattern = "oil://*",
-		callback = debounced_refresh,
+		callback = function()
+			debounced_refresh("BufEnter")
+		end,
 	})
 
 	-- Clear highlights when leaving oil buffers
@@ -257,6 +288,7 @@ local function setup_autocmds()
 		group = group,
 		pattern = "oil://*",
 		callback = function()
+			debug_log("BufLeave - clearing highlights and timer")
 			if refresh_timer then
 				vim.fn.timer_stop(refresh_timer)
 				refresh_timer = nil
@@ -269,24 +301,29 @@ local function setup_autocmds()
 	vim.api.nvim_create_autocmd({ "BufWritePost", "TextChanged" }, {
 		group = group,
 		pattern = "oil://*",
-		callback = debounced_refresh,
+		callback = function(args)
+			debounced_refresh("BufWritePost/TextChanged:" .. args.event)
+		end,
 	})
 
 	-- Focus events (consolidated to reduce redundancy)
 	vim.api.nvim_create_autocmd({ "FocusGained", "WinEnter" }, {
 		group = group,
 		pattern = "oil://*",
-		callback = debounced_refresh,
+		callback = function(args)
+			debounced_refresh("Focus:" .. args.event)
+		end,
 	})
 
 	-- Terminal events (for when lazygit closes)
 	vim.api.nvim_create_autocmd("TermClose", {
 		group = group,
 		callback = function()
+			debug_log("TermClose event")
 			-- Use a longer delay for terminal close to avoid conflicts
 			vim.defer_fn(function()
 				if vim.bo.filetype == "oil" then
-					debounced_refresh()
+					debounced_refresh("TermClose")
 				end
 			end, 100)
 		end,
@@ -296,9 +333,9 @@ local function setup_autocmds()
 	vim.api.nvim_create_autocmd("User", {
 		group = group,
 		pattern = { "FugitiveChanged", "GitSignsUpdate", "LazyGitClosed" },
-		callback = function()
+		callback = function(args)
 			if vim.bo.filetype == "oil" then
-				debounced_refresh()
+				debounced_refresh("User:" .. args.match)
 			end
 		end,
 	})
@@ -339,7 +376,7 @@ vim.api.nvim_create_autocmd("FileType", {
 
 -- Manual refresh function
 function M.refresh()
-	debounced_refresh()
+	debounced_refresh("manual")
 end
 
 return M
