@@ -13,6 +13,13 @@ local default_highlights = {
 local refresh_timer = nil
 local DEBOUNCE_MS = 50
 
+-- Cache to prevent unnecessary refreshes
+local last_refresh_state = {
+	dir = nil,
+	git_status_hash = nil,
+	buffer_lines_hash = nil,
+}
+
 local function setup_highlights()
 	-- Only set highlight if it doesn't already exist (respects colorscheme)
 	for name, opts in pairs(default_highlights) do
@@ -124,25 +131,69 @@ local function clear_highlights()
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 end
 
+-- Simple hash function for change detection
+local function simple_hash(data)
+	local hash = 0
+	local str = vim.inspect(data)
+	for i = 1, #str do
+		hash = (hash * 31 + string.byte(str, i)) % 2147483647
+	end
+	return hash
+end
+
+-- Check if refresh is needed based on content changes
+local function should_refresh(current_dir, git_status, buffer_lines)
+	local git_hash = simple_hash(git_status)
+	local lines_hash = simple_hash(buffer_lines)
+	
+	if last_refresh_state.dir ~= current_dir or
+	   last_refresh_state.git_status_hash ~= git_hash or
+	   last_refresh_state.buffer_lines_hash ~= lines_hash then
+		
+		last_refresh_state.dir = current_dir
+		last_refresh_state.git_status_hash = git_hash
+		last_refresh_state.buffer_lines_hash = lines_hash
+		return true
+	end
+	
+	return false
+end
+
 local function apply_git_highlights()
 	local oil = require("oil")
 	local current_dir = oil.get_current_dir()
 
 	if not current_dir then
 		clear_highlights()
+		last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
 		return
 	end
 
 	local git_status = get_git_status(current_dir)
 	if vim.tbl_isempty(git_status) then
 		clear_highlights()
+		last_refresh_state = { dir = current_dir, git_status_hash = simple_hash({}), buffer_lines_hash = nil }
 		return
 	end
 
 	local bufnr = vim.api.nvim_get_current_buf()
+	
+	-- Validate buffer is still valid and is an oil buffer
+	if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "oil" then
+		return
+	end
+	
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	
+	-- Check if refresh is actually needed
+	if not should_refresh(current_dir, git_status, lines) then
+		return -- Skip refresh if nothing changed
+	end
 
 	clear_highlights()
+
+	-- Get namespace once and reuse
+	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
 
 	for i, line in ipairs(lines) do
 		local entry = oil.get_entry_on_line(bufnr, i)
@@ -158,13 +209,17 @@ local function apply_git_highlights()
 				if name_start then
 					-- Highlight the filename and store match ID
 					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, #entry.name } })
-					table.insert(git_match_ids, match_id)
+					if match_id > 0 then
+						table.insert(git_match_ids, match_id)
+					end
 
 					-- Add symbol as virtual text at the end of the line
-					local ns_id = vim.api.nvim_create_namespace("oil_git_status")
-					vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
+					-- Use pcall to prevent errors from causing redraws
+					pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, i - 1, 0, {
 						virt_text = { { " " .. symbol, hl_group } },
 						virt_text_pos = "eol",
+						-- Add strict invalidation to prevent stale extmarks
+						invalidate = true,
 					})
 				end
 			end

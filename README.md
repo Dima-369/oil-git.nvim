@@ -1,6 +1,6 @@
 # Fork changes
 
-- fix blinking cursor which indicated performance issues
+- fix blinking cursor which indicated performance issuesoeu
 
 # oil-git.nvim
 
