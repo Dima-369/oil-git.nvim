@@ -179,22 +179,24 @@ end
 local git_match_ids = {}
 
 local function clear_highlights()
-	debug_log("*** CLEAR_HIGHLIGHTS called - CURSOR BLINK SOURCE!")
-	debug_log("Match IDs to clear: " .. #git_match_ids)
+	debug_log("*** CLEAR_HIGHLIGHTS called - wiping ALL highlights")
 	
-	-- Clear only our specific git highlights
+	-- Clear ALL match highlights in the buffer (more thorough)
+	pcall(vim.fn.clearmatches)
+	
+	-- Also clear our tracked match IDs
 	for i, match_id in ipairs(git_match_ids) do
-		debug_log("Clearing match ID: " .. match_id)
 		pcall(vim.fn.matchdelete, match_id)
 	end
 	git_match_ids = {}
 
-	-- Clear existing virtual text
+	-- Clear existing virtual text from our namespace
 	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
 	local bufnr = vim.api.nvim_get_current_buf()
-	debug_log("Clearing namespace for buffer: " .. bufnr)
-	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-	debug_log("*** CLEAR_HIGHLIGHTS completed")
+	if vim.api.nvim_buf_is_valid(bufnr) then
+		vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+	end
+	debug_log("*** CLEAR_HIGHLIGHTS completed - all highlights wiped")
 end
 
 -- Simple hash function for change detection
@@ -275,7 +277,7 @@ local function apply_git_highlights()
 	debug_log("Got " .. #lines .. " lines from buffer")
 	
 
-	debug_log("applying highlights - content changed")
+	debug_log("applying highlights - always wiping and reapplying all")
 	
 	-- Save cursor position to restore later
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
@@ -284,6 +286,7 @@ local function apply_git_highlights()
 	-- Disable redraw during highlight operations
 	vim.cmd('set lazyredraw')
 	
+	-- ALWAYS clear all highlights first to ensure clean state
 	clear_highlights()
 
 	-- Get namespace once and reuse
