@@ -32,11 +32,12 @@ The original plugin suffered from a critical performance issue where GitSigns wo
 
 ## Features
 
-- File name highlighting - Colors files based on git status
-- Status symbols - Shows git symbols at end of lines
-- Real-time updates - Automatically refreshes when git changes occur
-- Performance optimized - No caching, always fresh git status
-- LazyGit integration - Updates instantly when closing LazyGit or other git tools
+- **File name highlighting** - Colors files based on git status
+- **Directory highlighting** - Colors directories that contain modified files (with italic styling)
+- **Status symbols** - Shows git symbols at end of lines
+- **Real-time updates** - Automatically refreshes when git changes occur
+- **Performance optimized** - No caching, always fresh git status
+- **LazyGit integration** - Updates instantly when closing LazyGit or other git tools
 
 ## Installation
 
@@ -101,12 +102,20 @@ The plugin only sets default colors if highlight groups don't already exist.
 ```lua
 require("oil-git").setup({
   highlights = {
+    -- File highlights
     OilGitAdded = { fg = "#a6e3a1" },     -- green
     OilGitModified = { fg = "#f9e2af" },  -- yellow  
     OilGitDeleted = { fg = "#f38ba8" },   -- red
     OilGitRenamed = { fg = "#cba6f7" },   -- purple
     OilGitUntracked = { fg = "#89b4fa" }, -- blue
     OilGitIgnored = { fg = "#6c7086" },   -- gray
+    
+    -- Directory highlights (italic versions for directories containing changes)
+    OilGitDirAdded = { fg = "#a6e3a1", italic = true },
+    OilGitDirModified = { fg = "#f9e2af", italic = true },
+    OilGitDirRenamed = { fg = "#cba6f7", italic = true },
+    OilGitDirUntracked = { fg = "#89b4fa", italic = true },
+    OilGitDirIgnored = { fg = "#6c7086", italic = true },
   },
   periodic_refresh_ms = 3000,             -- External update interval (default: 3000ms)
 })

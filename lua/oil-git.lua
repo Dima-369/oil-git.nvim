@@ -7,6 +7,12 @@ local default_highlights = {
 	OilGitRenamed = { fg = "#cba6f7" },
 	OilGitUntracked = { fg = "#89b4fa" },
 	OilGitIgnored = { fg = "#6c7086" },
+	-- Directory highlights (slightly dimmed versions)
+	OilGitDirAdded = { fg = "#a6e3a1", italic = true },
+	OilGitDirModified = { fg = "#f9e2af", italic = true },
+	OilGitDirRenamed = { fg = "#cba6f7", italic = true },
+	OilGitDirUntracked = { fg = "#89b4fa", italic = true },
+	OilGitDirIgnored = { fg = "#6c7086", italic = true },
 }
 
 -- Debouncing variables
@@ -27,7 +33,7 @@ local last_refresh_state = {
 }
 
 -- Debug flag - set to true to enable logging
-local DEBUG = false
+local DEBUG = true
 
 local function debug_log(msg, level)
 	if DEBUG then
@@ -95,36 +101,72 @@ local function get_git_status(dir)
 	return status
 end
 
-local function get_highlight_group(status_code)
+-- Check if a directory contains files with git changes
+local function get_directory_status(dir_path, git_status)
+	local dir_path_normalized = dir_path:gsub("/$", "") .. "/"
+	local status_priority = {
+		["A"] = 4,  -- Added (highest priority)
+		["M"] = 3,  -- Modified
+		["R"] = 2,  -- Renamed
+		["?"] = 1,  -- Untracked
+		["!"] = 0,  -- Ignored (lowest priority)
+	}
+	
+	local highest_priority = -1
+	local highest_status = nil
+	
+	for filepath, status_code in pairs(git_status) do
+		-- Check if this file is within the directory
+		if filepath:sub(1, #dir_path_normalized) == dir_path_normalized then
+			local first_char = status_code:sub(1, 1)
+			local second_char = status_code:sub(2, 2)
+			
+			-- Check both staged and unstaged changes
+			for _, char in ipairs({first_char, second_char}) do
+				local priority = status_priority[char]
+				if priority and priority > highest_priority then
+					highest_priority = priority
+					highest_status = char .. char  -- Convert single char to status code format
+				end
+			end
+		end
+	end
+	
+	return highest_status
+end
+
+local function get_highlight_group(status_code, is_directory)
 	if not status_code then
 		return nil, nil
 	end
 
 	local first_char = status_code:sub(1, 1)
 	local second_char = status_code:sub(2, 2)
+	
+	local prefix = is_directory and "OilGitDir" or "OilGit"
 
 	-- Check staged changes first (prioritize staged over unstaged)
 	if first_char == "A" then
-		return "OilGitAdded", "+"
+		return prefix .. "Added", "+"
 	elseif first_char == "M" then
-		return "OilGitModified", "~"
+		return prefix .. "Modified", "~"
 	elseif first_char == "R" then
-		return "OilGitRenamed", "â†’"
+		return prefix .. "Renamed", "â†'"
 	end
 
 	-- Check unstaged changes
 	if second_char == "M" then
-		return "OilGitModified", "~"
+		return prefix .. "Modified", "~"
 	end
 
 	-- Untracked files
 	if status_code == "??" then
-		return "OilGitUntracked", "?"
+		return prefix .. "Untracked", "?"
 	end
 
 	-- Ignored files
 	if status_code == "!!" then
-		return "OilGitIgnored", "!"
+		return prefix .. "Ignored", "!"
 	end
 
 	return nil, nil
@@ -225,17 +267,28 @@ local function apply_git_highlights()
 
 	for i, line in ipairs(lines) do
 		local entry = oil.get_entry_on_line(bufnr, i)
-		if entry and entry.type == "file" then
-			local filepath = current_dir .. entry.name
+		if entry then
+			local status_code = nil
+			local is_directory = entry.type == "directory"
+			
+			if entry.type == "file" then
+				-- For files, check direct git status
+				local filepath = current_dir .. entry.name
+				status_code = git_status[filepath]
+			elseif entry.type == "directory" then
+				-- For directories, check if they contain modified files
+				local dirpath = current_dir .. entry.name
+				status_code = get_directory_status(dirpath, git_status)
+				debug_log("directory " .. entry.name .. " status: " .. (status_code or "none"))
+			end
 
-			local status_code = git_status[filepath]
-			local hl_group, symbol = get_highlight_group(status_code)
+			local hl_group, symbol = get_highlight_group(status_code, is_directory)
 
 			if hl_group and symbol then
-				-- Find the filename part in the line and highlight it
+				-- Find the entry name in the line and highlight it
 				local name_start = line:find(entry.name, 1, true)
 				if name_start then
-					-- Highlight the filename and store match ID
+					-- Highlight the entry name and store match ID
 					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, #entry.name } })
 					if match_id > 0 then
 						table.insert(git_match_ids, match_id)
