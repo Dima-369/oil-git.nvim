@@ -284,8 +284,8 @@ local function apply_git_highlights()
 	debug_log("applying highlights - always wiping and reapplying all")
 
 	-- Save cursor position to restore later
-	local cursor_pos = vim.api.nvim_win_get_cursor(0)
-	local view = vim.fn.winsaveview()
+	-- local cursor_pos = vim.api.nvim_win_get_cursor(0)
+	-- local view = vim.fn.winsaveview()
 
 	-- Disable redraw during highlight operations
 	-- vim.cmd("set lazyredraw")
@@ -359,13 +359,13 @@ local function apply_git_highlights()
 	-- Apply redraw strategy based on configuration
 	if REDRAW_STRATEGY == "immediate" then
 		debug_log("*** REDRAW: immediate - WILL CAUSE CURSOR BLINK!")
-		-- vim.cmd("redraw!")
+		vim.cmd("redraw!")
 	elseif REDRAW_STRATEGY == "gentle" then
 		debug_log("*** REDRAW: gentle - scheduling redraw")
 		-- Schedule redraw to next event loop to minimize cursor blinking
 		vim.schedule(function()
 			debug_log("*** REDRAW: gentle - executing scheduled redraw - CURSOR BLINK!")
-			-- vim.cmd("redraw!")
+			vim.cmd("redraw!")
 		end)
 	elseif REDRAW_STRATEGY == "none" then
 		debug_log("*** REDRAW: none - no forced redraw")
