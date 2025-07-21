@@ -350,8 +350,8 @@ local function apply_git_highlights()
 	end
 
 	-- Restore cursor position and view
-	pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
-	pcall(vim.fn.winrestview, view)
+	-- pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
+	-- pcall(vim.fn.winrestview, view)
 
 	-- Re-enable redraw with configurable strategy
 	-- vim.cmd("set nolazyredraw")
