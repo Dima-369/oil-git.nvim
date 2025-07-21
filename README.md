@@ -149,7 +149,8 @@ The plugin automatically refreshes git status when:
 
 ## Commands
 
-- `:lua require("oil-git").refresh()` - Manually refresh git status
+- `:lua require("oil-git").refresh()` - Manually refresh git status (debounced)
+- `:lua require("oil-git").force_update()` - Force immediate git status update (bypasses all debouncing)
 
 ## Requirements
 

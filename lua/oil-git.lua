@@ -603,9 +603,29 @@ vim.api.nvim_create_autocmd("FileType", {
 	group = vim.api.nvim_create_augroup("OilGitAutoInit", { clear = true }),
 })
 
--- Manual refresh function
+-- Manual refresh function (debounced)
 function M.refresh()
 	debounced_refresh("manual")
+end
+
+-- Force immediate git status update (bypasses debouncing and cooldowns)
+function M.force_update()
+	debug_log("force_update called - bypassing all debouncing")
+	
+	-- Cancel any pending timers
+	if refresh_timer then
+		vim.fn.timer_stop(refresh_timer)
+		refresh_timer = nil
+	end
+	
+	-- Reset cooldown to allow immediate refresh
+	last_refresh_time = 0
+	
+	-- Clear cache to force refresh
+	last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
+	
+	-- Apply highlights immediately
+	apply_git_highlights()
 end
 
 return M
