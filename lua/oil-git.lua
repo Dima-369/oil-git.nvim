@@ -340,6 +340,7 @@ local function apply_git_highlights()
 					pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, i - 1, 0, {
 						virt_text = { { " " .. symbol, hl_group } },
 						virt_text_pos = "eol",
+						hl_mode = "combine",
 						-- Add strict invalidation to prevent stale extmarks
 						invalidate = true,
 					})
