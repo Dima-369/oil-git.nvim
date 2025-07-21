@@ -379,15 +379,24 @@ end
 
 -- Lightweight check for git changes without applying highlights
 local function check_git_changes_only()
+	debug_log("*** CHECK_GIT_CHANGES_ONLY called - POTENTIAL CURSOR BLINK!")
 	local oil = require("oil")
+	debug_log("Getting oil.get_current_dir() - POTENTIAL CURSOR BLINK!")
 	local current_dir = oil.get_current_dir()
+	debug_log("Got current_dir: " .. (current_dir or "nil"))
 	
 	if not current_dir then
+		debug_log("No current_dir, returning false")
 		return false
 	end
 	
+	debug_log("Calling get_git_status() - POTENTIAL CURSOR BLINK!")
 	local git_status = get_git_status(current_dir)
+	debug_log("Got git_status with " .. vim.tbl_count(git_status) .. " entries")
+	
+	debug_log("Calling simple_hash() - POTENTIAL CURSOR BLINK!")
 	local git_hash = simple_hash(git_status)
+	debug_log("Got git_hash: " .. git_hash)
 	
 	-- Only return true if git status actually changed
 	if last_refresh_state.git_status_hash ~= git_hash then
