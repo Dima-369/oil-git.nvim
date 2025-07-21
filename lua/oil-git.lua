@@ -288,7 +288,7 @@ local function apply_git_highlights()
 	local view = vim.fn.winsaveview()
 
 	-- Disable redraw during highlight operations
-	vim.cmd("set lazyredraw")
+	-- vim.cmd("set lazyredraw")
 
 	-- ALWAYS clear all highlights first to ensure clean state
 	clear_highlights()
@@ -354,7 +354,7 @@ local function apply_git_highlights()
 	pcall(vim.fn.winrestview, view)
 
 	-- Re-enable redraw with configurable strategy
-	vim.cmd("set nolazyredraw")
+	-- vim.cmd("set nolazyredraw")
 
 	-- Apply redraw strategy based on configuration
 	if REDRAW_STRATEGY == "immediate" then
@@ -582,7 +582,7 @@ function M.setup(opts)
 	if opts.debug then
 		DEBUG = true
 	end
-
+o
 	-- Allow customizing redraw strategy
 	if opts.redraw_strategy then
 		REDRAW_STRATEGY = opts.redraw_strategy
