@@ -318,17 +318,42 @@ local function apply_git_highlights()
 	end
 end
 
+-- Lightweight check for git changes without applying highlights
+local function check_git_changes_only()
+	local oil = require("oil")
+	local current_dir = oil.get_current_dir()
+	
+	if not current_dir then
+		return false
+	end
+	
+	local git_status = get_git_status(current_dir)
+	local git_hash = simple_hash(git_status)
+	
+	-- Only return true if git status actually changed
+	if last_refresh_state.git_status_hash ~= git_hash then
+		debug_log("periodic check: git status changed")
+		return true
+	end
+	
+	debug_log("periodic check: no git changes")
+	return false
+end
+
 -- Start periodic refresh timer for external changes
 local function start_periodic_refresh()
-	if periodic_timer then
-		return -- Already running
+	if periodic_timer or not PERIODIC_REFRESH_MS then
+		return -- Already running or disabled
 	end
 	
 	debug_log("starting periodic refresh timer")
 	periodic_timer = vim.fn.timer_start(PERIODIC_REFRESH_MS, function()
 		if vim.bo.filetype == "oil" then
 			debug_log("periodic refresh triggered")
-			apply_git_highlights()
+			-- Only refresh if git status actually changed
+			if check_git_changes_only() then
+				debounced_refresh("periodic")
+			end
 		else
 			debug_log("stopping periodic timer - not in oil buffer")
 			stop_periodic_refresh()
@@ -481,6 +506,11 @@ function M.setup(opts)
 	-- Allow customization of periodic refresh interval
 	if opts.periodic_refresh_ms then
 		PERIODIC_REFRESH_MS = opts.periodic_refresh_ms
+	end
+	
+	-- Allow disabling periodic refresh entirely
+	if opts.disable_periodic_refresh then
+		PERIODIC_REFRESH_MS = nil
 	end
 
 	initialize()

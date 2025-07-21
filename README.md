@@ -118,6 +118,7 @@ require("oil-git").setup({
     OilGitDirIgnored = { fg = "#6c7086", italic = true },
   },
   periodic_refresh_ms = 3000,             -- External update interval (default: 3000ms)
+  -- disable_periodic_refresh = true,         -- Disable periodic refresh to eliminate cursor blinking
 })
 ```
 
