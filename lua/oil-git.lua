@@ -20,7 +20,7 @@ local refresh_timer = nil
 local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
-oeu
+
 -- Periodic refresh for external changes
 local periodic_timer = nil
 local PERIODIC_REFRESH_MS = 3000  -- 3 seconds
