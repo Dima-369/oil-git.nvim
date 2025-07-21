@@ -62,6 +62,7 @@ The original plugin suffered from a critical performance issue where GitSigns wo
       OilGitModified = { fg = "#ff0000" }, -- Custom colors
     },
     periodic_refresh_ms = 3000, -- Customize external update interval
+    debug = true,               -- Enable debug logging for troubleshooting
   }
 }
 ```
@@ -119,6 +120,7 @@ require("oil-git").setup({
   },
   periodic_refresh_ms = 3000,             -- External update interval (default: 3000ms)
   -- disable_periodic_refresh = true,         -- Disable periodic refresh to eliminate cursor blinking
+  -- debug = true,                            -- Enable debug logging via vim.notify
 })
 ```
 

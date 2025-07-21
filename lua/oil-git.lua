@@ -32,8 +32,8 @@ local last_refresh_state = {
 	buffer_lines_hash = nil,
 }
 
--- Debug flag - set to true to enable logging
-local DEBUG = true
+-- Debug flag - configurable via setup options
+local DEBUG = false
 
 local function debug_log(msg, level)
 	if DEBUG then
@@ -511,6 +511,11 @@ function M.setup(opts)
 	-- Allow disabling periodic refresh entirely
 	if opts.disable_periodic_refresh then
 		PERIODIC_REFRESH_MS = nil
+	end
+	
+	-- Allow enabling debug logging
+	if opts.debug ~= nil then
+		DEBUG = opts.debug
 	end
 
 	initialize()
