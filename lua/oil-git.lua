@@ -235,12 +235,25 @@ local function apply_git_highlights()
 		last_refresh_state = { dir = nil, git_status_hash = nil, buffer_lines_hash = nil }
 		return
 	end
+	
+	-- Quick check: if we're in the same directory and had no git status before, skip entirely
+	if last_refresh_state.dir == current_dir and 
+	   last_refresh_state.git_status_hash == simple_hash({}) then
+		debug_log("same directory with no previous git status - skipping entirely to prevent cursor blink")
+		return
+	end
 
 	debug_log("current_dir: " .. current_dir)
 	local git_status = get_git_status(current_dir)
 	if vim.tbl_isempty(git_status) then
-		debug_log("no git status, clearing highlights")
-		clear_highlights()
+		debug_log("no git status - checking if we need to clear highlights")
+		-- Only clear highlights if we previously had some
+		if last_refresh_state.git_status_hash and last_refresh_state.git_status_hash ~= simple_hash({}) then
+			debug_log("clearing highlights - had previous git status")
+			clear_highlights()
+		else
+			debug_log("no highlights to clear - no previous git status")
+		end
 		last_refresh_state = { dir = current_dir, git_status_hash = simple_hash({}), buffer_lines_hash = nil }
 		return
 	end
