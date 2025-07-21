@@ -302,7 +302,35 @@ local function apply_git_highlights()
 
 			if hl_group and symbol then
 				-- Find the entry name in the line and highlight it
-				local name_start = line:find(entry.name, 1, true)
+				-- Handle files with spaces by trying multiple approaches
+				local name_start = nil
+				
+				-- First try: exact match (works for files without spaces)
+				name_start = line:find(entry.name, 1, true)
+				
+				-- Second try: look for quoted version (oil might quote files with spaces)
+				if not name_start then
+					local quoted_name = '"' .. entry.name .. '"'
+					name_start = line:find(quoted_name, 1, true)
+					if name_start then
+						-- Adjust to highlight just the filename, not the quotes
+						name_start = name_start + 1
+					end
+				end
+				
+				-- Third try: escape special characters and use pattern matching
+				if not name_start then
+					local escaped_name = entry.name:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+					name_start = line:find(escaped_name)
+				end
+				
+				-- Fourth try: fallback for complex cases
+				if not name_start then
+					local content_start = line:find("%S")
+					if content_start and line:find(entry.name:gsub(" ", ".*")) then
+						name_start = content_start
+					end
+				end
 				if name_start then
 					-- For directories, include the trailing slash in the highlight
 					local highlight_length = #entry.name
@@ -329,6 +357,9 @@ local function apply_git_highlights()
 						-- Add strict invalidation to prevent stale extmarks
 						invalidate = true,
 					})
+				else
+					-- Debug: log when we can't find the filename
+					debug_log("Could not find filename '" .. entry.name .. "' in line: " .. line)
 				end
 			end
 		end
