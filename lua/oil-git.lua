@@ -15,6 +15,10 @@ local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
 
+-- Periodic refresh for external changes
+local periodic_timer = nil
+local PERIODIC_REFRESH_MS = 3000  -- 3 seconds
+
 -- Cache to prevent unnecessary refreshes
 local last_refresh_state = {
 	dir = nil,
@@ -251,6 +255,33 @@ local function apply_git_highlights()
 	end
 end
 
+-- Start periodic refresh timer for external changes
+local function start_periodic_refresh()
+	if periodic_timer then
+		return -- Already running
+	end
+	
+	debug_log("starting periodic refresh timer")
+	periodic_timer = vim.fn.timer_start(PERIODIC_REFRESH_MS, function()
+		if vim.bo.filetype == "oil" then
+			debug_log("periodic refresh triggered")
+			apply_git_highlights()
+		else
+			debug_log("stopping periodic timer - not in oil buffer")
+			stop_periodic_refresh()
+		end
+	end, { ["repeat"] = -1 }) -- Repeat indefinitely
+end
+
+-- Stop periodic refresh timer
+local function stop_periodic_refresh()
+	if periodic_timer then
+		debug_log("stopping periodic refresh timer")
+		vim.fn.timer_stop(periodic_timer)
+		periodic_timer = nil
+	end
+end
+
 -- Debounced refresh function to prevent excessive redraws
 local function debounced_refresh(source)
 	source = source or "unknown"
@@ -290,6 +321,7 @@ local function setup_autocmds()
 		pattern = "oil://*",
 		callback = function()
 			debounced_refresh("BufEnter")
+			start_periodic_refresh()
 		end,
 	})
 
@@ -298,11 +330,12 @@ local function setup_autocmds()
 		group = group,
 		pattern = "oil://*",
 		callback = function()
-			debug_log("BufLeave - clearing highlights and timer")
+			debug_log("BufLeave - clearing highlights and timers")
 			if refresh_timer then
 				vim.fn.timer_stop(refresh_timer)
 				refresh_timer = nil
 			end
+			stop_periodic_refresh()
 			clear_highlights()
 		end,
 	})
@@ -359,6 +392,16 @@ local function initialize()
 		return
 	end
 	
+	-- Clean up any existing timers from previous initialization
+	if refresh_timer then
+		vim.fn.timer_stop(refresh_timer)
+		refresh_timer = nil
+	end
+	if periodic_timer then
+		vim.fn.timer_stop(periodic_timer)
+		periodic_timer = nil
+	end
+	
 	setup_highlights()
 	setup_autocmds()
 	initialized = true
@@ -370,6 +413,11 @@ function M.setup(opts)
 	-- Merge user highlights with defaults (only affects fallbacks)
 	if opts.highlights then
 		default_highlights = vim.tbl_extend("force", default_highlights, opts.highlights)
+	end
+
+	-- Allow customization of periodic refresh interval
+	if opts.periodic_refresh_ms then
+		PERIODIC_REFRESH_MS = opts.periodic_refresh_ms
 	end
 
 	initialize()

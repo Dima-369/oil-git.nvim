@@ -1,10 +1,30 @@
-# Fork changes
-oeu
-- fix blinking cursor which indicated performance issuesoeu
-
 # oil-git.nvim
 
 Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that shows git status by coloring file names and adding status symbols.
+
+## Fork Improvements
+
+This fork includes significant performance fixes and enhancements:
+
+- **Fixed cursor blinking bug** - Eliminated infinite refresh loops caused by GitSigns events that were triggering excessive redraws and cursor flickering
+- **Enhanced performance** - Added intelligent debouncing (50ms) and cooldown protection (200ms) to prevent rapid-fire refreshes  
+- **Periodic external updates** - Added 3-second periodic refresh to catch git changes from external tools (configurable)
+- **Smart refresh logic** - Only refreshes when content actually changes (directory, git status, or buffer content)
+- **Improved cleanup** - Better timer management and highlight clearing to prevent memory leaks
+
+### Performance Details
+
+The original plugin suffered from a critical performance issue where GitSigns would fire continuous `GitSignsUpdate` events, creating an infinite loop:
+1. GitSigns fires update event
+2. oil-git refreshes highlights
+3. Refresh somehow triggers GitSigns again
+4. Loop continues, causing rapid cursor blinking
+
+**Solution implemented:**
+- Removed GitSigns event listener to break the infinite loop
+- Added 200ms cooldown between refreshes to prevent rapid-fire updates
+- Implemented content change detection to skip unnecessary refreshes
+- Added periodic 3-second timer for external git changes
 
 ## Screenshot
 
@@ -12,11 +32,11 @@ Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that
 
 ## Features
 
-- 🎨 **File name highlighting** - Colors files based on git status
-- 📝 **Status symbols** - Shows git symbols at end of lines
-- 🚀 **Real-time updates** - Automatically refreshes when git changes occur
-- ⚡ **Performance optimized** - No caching, always fresh git status
-- 🔄 **LazyGit integration** - Updates instantly when closing LazyGit or other git tools
+- File name highlighting - Colors files based on git status
+- Status symbols - Shows git symbols at end of lines
+- Real-time updates - Automatically refreshes when git changes occur
+- Performance optimized - No caching, always fresh git status
+- LazyGit integration - Updates instantly when closing LazyGit or other git tools
 
 ## Installation
 
@@ -24,7 +44,7 @@ Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that
 
 ```lua
 {
-  "benomahony/oil-git.nvim",
+  "Dima-369/oil-git.nvim",
   dependencies = { "stevearc/oil.nvim" },
   -- No opts or config needed! Works automatically
 }
@@ -34,12 +54,13 @@ Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that
 
 ```lua
 {
-  "benomahony/oil-git.nvim",
+  "Dima-369/oil-git.nvim",
   dependencies = { "stevearc/oil.nvim" },
   opts = {
     highlights = {
       OilGitModified = { fg = "#ff0000" }, -- Custom colors
-    }
+    },
+    periodic_refresh_ms = 3000, -- Customize external update interval
   }
 }
 ```
@@ -49,13 +70,13 @@ Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that
 ```lua
 -- Packer (no setup required)
 use {
-  "benomahony/oil-git.nvim",
+  "Dima-369/oil-git.nvim",
   requires = { "stevearc/oil.nvim" },
 }
 
 -- Plug (no setup required)
 Plug 'stevearc/oil.nvim'
-Plug 'benomahony/oil-git.nvim'
+Plug 'Dima-369/oil-git.nvim'
 ```
 
 ## Colorscheme Integration
@@ -86,7 +107,8 @@ require("oil-git").setup({
     OilGitRenamed = { fg = "#cba6f7" },   -- purple
     OilGitUntracked = { fg = "#89b4fa" }, -- blue
     OilGitIgnored = { fg = "#6c7086" },   -- gray
-  }
+  },
+  periodic_refresh_ms = 3000,             -- External update interval (default: 3000ms)
 })
 ```
 
@@ -110,7 +132,8 @@ The plugin automatically refreshes git status when:
 - Focus returns to Neovim (after using external git tools)
 - Window focus changes
 - Terminal closes (LazyGit, fugitive, etc.)
-- Git plugin events (GitSigns, Fugitive)
+- Git plugin events (Fugitive)
+- Every 3 seconds (periodic external change detection)
 
 ## Commands
 
