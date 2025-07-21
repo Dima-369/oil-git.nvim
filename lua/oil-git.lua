@@ -179,8 +179,12 @@ end
 local git_match_ids = {}
 
 local function clear_highlights()
+	debug_log("*** CLEAR_HIGHLIGHTS called - CURSOR BLINK SOURCE!")
+	debug_log("Match IDs to clear: " .. #git_match_ids)
+	
 	-- Clear only our specific git highlights
-	for _, match_id in ipairs(git_match_ids) do
+	for i, match_id in ipairs(git_match_ids) do
+		debug_log("Clearing match ID: " .. match_id)
 		pcall(vim.fn.matchdelete, match_id)
 	end
 	git_match_ids = {}
@@ -188,7 +192,9 @@ local function clear_highlights()
 	-- Clear existing virtual text
 	local ns_id = vim.api.nvim_create_namespace("oil_git_status")
 	local bufnr = vim.api.nvim_get_current_buf()
+	debug_log("Clearing namespace for buffer: " .. bufnr)
 	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+	debug_log("*** CLEAR_HIGHLIGHTS completed")
 end
 
 -- Simple hash function for change detection
@@ -259,15 +265,20 @@ local function apply_git_highlights()
 	end
 
 	debug_log("found " .. vim.tbl_count(git_status) .. " git status entries")
+	debug_log("*** Getting buffer info - POTENTIAL CURSOR BLINK!")
 	local bufnr = vim.api.nvim_get_current_buf()
+	debug_log("Buffer number: " .. bufnr)
 	
 	-- Validate buffer is still valid and is an oil buffer
+	debug_log("Validating buffer...")
 	if not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].filetype ~= "oil" then
 		debug_log("invalid buffer or not oil filetype")
 		return
 	end
 	
+	debug_log("Getting buffer lines - POTENTIAL CURSOR BLINK!")
 	local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+	debug_log("Got " .. #lines .. " lines from buffer")
 	
 	-- Check if refresh is actually needed
 	if not should_refresh(current_dir, git_status, lines) then
@@ -350,13 +361,17 @@ local function apply_git_highlights()
 	
 	-- Apply redraw strategy based on configuration
 	if REDRAW_STRATEGY == "immediate" then
+		debug_log("*** REDRAW: immediate - WILL CAUSE CURSOR BLINK!")
 		vim.cmd('redraw!')
 	elseif REDRAW_STRATEGY == "gentle" then
+		debug_log("*** REDRAW: gentle - scheduling redraw")
 		-- Schedule redraw to next event loop to minimize cursor blinking
 		vim.schedule(function()
+			debug_log("*** REDRAW: gentle - executing scheduled redraw - CURSOR BLINK!")
 			vim.cmd('redraw!')
 		end)
 	elseif REDRAW_STRATEGY == "none" then
+		debug_log("*** REDRAW: none - no forced redraw")
 		-- No forced redraw - let Neovim handle it naturally
 		-- This may result in delayed visual updates but no cursor blinking
 	end
