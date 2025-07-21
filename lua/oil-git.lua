@@ -176,12 +176,7 @@ end
 local git_match_ids = {}
 
 local function clear_highlights()
-	debug_log("*** CLEAR_HIGHLIGHTS called - wiping ALL highlights")
-
-	-- Clear ALL match highlights in the buffer (more thorough)
-	pcall(vim.fn.clearmatches)
-
-	-- Also clear our tracked match IDs
+	-- clear our tracked match IDs
 	for i, match_id in ipairs(git_match_ids) do
 		pcall(vim.fn.matchdelete, match_id)
 	end
