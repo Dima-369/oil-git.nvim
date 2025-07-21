@@ -1,3 +1,7 @@
+# Fork changes
+
+- fix blinking cursor which indicated performance issues
+
 # oil-git.nvim
 
 Git status integration for [oil.nvim](https://github.com/stevearc/oil.nvim) that shows git status by coloring file names and adding status symbols.
