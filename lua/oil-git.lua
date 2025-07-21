@@ -20,7 +20,7 @@ local refresh_timer = nil
 local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
-
+oeu
 -- Periodic refresh for external changes
 local periodic_timer = nil
 local PERIODIC_REFRESH_MS = 3000  -- 3 seconds
@@ -288,8 +288,18 @@ local function apply_git_highlights()
 				-- Find the entry name in the line and highlight it
 				local name_start = line:find(entry.name, 1, true)
 				if name_start then
-					-- Highlight the entry name and store match ID
-					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, #entry.name } })
+					-- For directories, include the trailing slash in the highlight
+					local highlight_length = #entry.name
+					if is_directory then
+						-- Check if there's a trailing slash after the directory name
+						local slash_pos = name_start + #entry.name
+						if slash_pos <= #line and line:sub(slash_pos, slash_pos) == "/" then
+							highlight_length = highlight_length + 1
+						end
+					end
+					
+					-- Highlight the entry name (and trailing slash for directories) and store match ID
+					local match_id = vim.fn.matchaddpos(hl_group, { { i, name_start, highlight_length } })
 					if match_id > 0 then
 						table.insert(git_match_ids, match_id)
 					end
