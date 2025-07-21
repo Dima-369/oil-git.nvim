@@ -20,10 +20,13 @@ local refresh_timer = nil
 local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200  -- Minimum 200ms between actual refreshes
-
+oeu
 -- Periodic refresh for external changes
 local periodic_timer = nil
 local PERIODIC_REFRESH_MS = 3000  -- 3 seconds
+
+-- Redraw strategy for cursor blinking control
+local REDRAW_STRATEGY = "gentle"  -- "gentle", "immediate", "none"
 
 -- Cache to prevent unnecessary refreshes
 local last_refresh_state = {
@@ -260,6 +263,14 @@ local function apply_git_highlights()
 	end
 
 	debug_log("applying highlights - content changed")
+	
+	-- Save cursor position to restore later
+	local cursor_pos = vim.api.nvim_win_get_cursor(0)
+	local view = vim.fn.winsaveview()
+	
+	-- Disable redraw during highlight operations
+	vim.cmd('set lazyredraw')
+	
 	clear_highlights()
 
 	-- Get namespace once and reuse
@@ -315,6 +326,26 @@ local function apply_git_highlights()
 				end
 			end
 		end
+	end
+	
+	-- Restore cursor position and view
+	pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
+	pcall(vim.fn.winrestview, view)
+	
+	-- Re-enable redraw with configurable strategy
+	vim.cmd('set nolazyredraw')
+	
+	-- Apply redraw strategy based on configuration
+	if REDRAW_STRATEGY == "immediate" then
+		vim.cmd('redraw!')
+	elseif REDRAW_STRATEGY == "gentle" then
+		-- Schedule redraw to next event loop to minimize cursor blinking
+		vim.schedule(function()
+			vim.cmd('redraw!')
+		end)
+	elseif REDRAW_STRATEGY == "none" then
+		-- No forced redraw - let Neovim handle it naturally
+		-- This may result in delayed visual updates but no cursor blinking
 	end
 end
 
@@ -516,6 +547,11 @@ function M.setup(opts)
 	-- Allow enabling debug logging
 	if opts.debug ~= nil then
 		DEBUG = opts.debug
+	end
+	
+	-- Allow customizing redraw strategy
+	if opts.redraw_strategy then
+		REDRAW_STRATEGY = opts.redraw_strategy
 	end
 
 	initialize()
