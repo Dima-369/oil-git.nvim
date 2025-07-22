@@ -501,6 +501,17 @@ local function setup_autocmds()
 		end,
 	})
 
+	-- Also trigger on any buffer with oil filetype (catches nvim . case)
+	vim.api.nvim_create_autocmd("BufEnter", {
+		group = group,
+		callback = function()
+			if vim.bo.filetype == "oil" then
+				debounced_refresh("BufEnter-oil-filetype")
+				start_periodic_refresh()
+			end
+		end,
+	})
+
 	-- Clear highlights when leaving oil buffers
 	vim.api.nvim_create_autocmd("BufLeave", {
 		group = group,
@@ -513,6 +524,22 @@ local function setup_autocmds()
 			end
 			stop_periodic_refresh()
 			clear_highlights()
+		end,
+	})
+
+	-- Also handle leaving any oil filetype buffer
+	vim.api.nvim_create_autocmd("BufLeave", {
+		group = group,
+		callback = function()
+			if vim.bo.filetype == "oil" then
+				debug_log("BufLeave oil filetype - clearing highlights and timers")
+				if refresh_timer then
+					vim.fn.timer_stop(refresh_timer)
+					refresh_timer = nil
+				end
+				stop_periodic_refresh()
+				clear_highlights()
+			end
 		end,
 	})
 
@@ -607,6 +634,15 @@ function M.setup(opts)
 	end
 
 	initialize()
+	
+	-- If we're already in an oil buffer when setup is called (nvim . case),
+	-- trigger a refresh after a short delay
+	vim.defer_fn(function()
+		if vim.bo.filetype == "oil" then
+			debug_log("Setup - already in oil buffer, triggering refresh")
+			debounced_refresh("setup-existing-oil-buffer")
+		end
+	end, 150)
 end
 
 -- Auto-initialize when oil buffer is entered (if not already done)
@@ -614,6 +650,14 @@ vim.api.nvim_create_autocmd("FileType", {
 	pattern = "oil",
 	callback = function()
 		initialize()
+		-- Trigger immediate refresh after initialization with a small delay
+		-- to ensure oil has fully loaded
+		vim.defer_fn(function()
+			if vim.bo.filetype == "oil" then
+				debug_log("FileType oil - triggering delayed refresh")
+				debounced_refresh("FileType-oil-delayed")
+			end
+		end, 100)
 	end,
 	group = vim.api.nvim_create_augroup("OilGitAutoInit", { clear = true }),
 })
