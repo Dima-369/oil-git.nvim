@@ -43,10 +43,21 @@ end
 
 local function setup_highlights()
 	-- Only set highlight if it doesn't already exist (respects colorscheme)
+	debug_log("SETUP_HIGHLIGHTS: Setting up highlight groups")
 	for name, opts in pairs(default_highlights) do
 		if vim.fn.hlexists(name) == 0 then
 			vim.api.nvim_set_hl(0, name, opts)
+			debug_log("  Created highlight group: " .. name)
+		else
+			debug_log("  Highlight group already exists: " .. name)
 		end
+	end
+	
+	-- Verify directory highlight groups specifically
+	local dir_groups = {"OilGitDirAdded", "OilGitDirModified", "OilGitDirRenamed", "OilGitDirUntracked", "OilGitDirIgnored"}
+	for _, group in ipairs(dir_groups) do
+		local exists = vim.fn.hlexists(group) == 1
+		debug_log("  Directory highlight group " .. group .. ": " .. (exists and "EXISTS" or "MISSING"))
 	end
 end
 
@@ -104,6 +115,8 @@ end
 -- Check if a directory contains files with git changes
 local function get_directory_status(dir_path, git_status)
 	local dir_path_normalized = dir_path:gsub("/$", "") .. "/"
+	debug_log("  DIR STATUS CHECK: Looking for files in '" .. dir_path_normalized .. "'")
+	
 	local status_priority = {
 		["A"] = 4, -- Added (highest priority)
 		["M"] = 3, -- Modified
@@ -114,10 +127,12 @@ local function get_directory_status(dir_path, git_status)
 
 	local highest_priority = -1
 	local highest_status = nil
+	local found_files = {}
 
 	for filepath, status_code in pairs(git_status) do
 		-- Check if this file is within the directory
 		if filepath:sub(1, #dir_path_normalized) == dir_path_normalized then
+			table.insert(found_files, filepath .. " (" .. status_code .. ")")
 			local first_char = status_code:sub(1, 1)
 			local second_char = status_code:sub(2, 2)
 
@@ -132,6 +147,11 @@ local function get_directory_status(dir_path, git_status)
 		end
 	end
 
+	debug_log("  DIR STATUS RESULT: Found " .. #found_files .. " files, status: " .. (highest_status or "none"))
+	if #found_files > 0 then
+		debug_log("    Files: " .. table.concat(found_files, ", "))
+	end
+	
 	return highest_status
 end
 
@@ -341,7 +361,10 @@ local function apply_git_highlights()
 							name_start = name_start + 1
 							name_end = name_end - 1
 						end
+						debug_log("  Method 1 SUCCESS: Found pattern '" .. pattern .. "' at " .. start_pos .. "-" .. name_end)
 						break
+					else
+						debug_log("  Method 1: Pattern '" .. pattern .. "' NOT found in line")
 					end
 				end
 				
@@ -389,13 +412,15 @@ local function apply_git_highlights()
 					end
 					
 					debug_log(string.format("Highlighting '%s' from col %d to %d", entry.name, col_start, col_end))
+					debug_log("  Highlight group: " .. hl_group .. " (exists: " .. tostring(vim.fn.hlexists(hl_group) == 1) .. ")")
 					
 					-- Use extmarks for highlighting (more reliable cleanup)
-					pcall(vim.api.nvim_buf_set_extmark, bufnr, highlight_namespace, i - 1, col_start, {
+					local success, err = pcall(vim.api.nvim_buf_set_extmark, bufnr, highlight_namespace, i - 1, col_start, {
 						end_col = col_end,
 						hl_group = hl_group,
 						priority = 100,  -- Higher priority to override other highlights
 					})
+					debug_log("  Extmark application: " .. (success and "SUCCESS" or ("FAILED: " .. tostring(err))))
 					
 					-- Add symbol as virtual text at the end of the line
 					pcall(vim.api.nvim_buf_set_extmark, bufnr, symbol_namespace, i - 1, 0, {
