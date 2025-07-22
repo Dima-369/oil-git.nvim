@@ -428,6 +428,45 @@ local function check_git_changes_only()
 	return false
 end
 
+-- Check if oil buffer is ready for highlighting
+local function is_oil_buffer_ready()
+	if vim.bo.filetype ~= "oil" then
+		return false
+	end
+	
+	local oil = require("oil")
+	local current_dir = oil.get_current_dir()
+	if not current_dir then
+		debug_log("oil buffer not ready - no current_dir")
+		return false
+	end
+	
+	-- Check if buffer has content
+	local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+	if #lines == 0 or (#lines == 1 and lines[1] == "") then
+		debug_log("oil buffer not ready - no content")
+		return false
+	end
+	
+	-- Check if oil can get entries (buffer is fully loaded)
+	local has_entries = false
+	for i = 1, math.min(#lines, 5) do  -- Check first few lines
+		local entry = oil.get_entry_on_line(0, i)
+		if entry then
+			has_entries = true
+			break
+		end
+	end
+	
+	if not has_entries then
+		debug_log("oil buffer not ready - no entries found")
+		return false
+	end
+	
+	debug_log("oil buffer is ready")
+	return true
+end
+
 -- Debounced refresh function to prevent excessive redraws
 local function debounced_refresh(source)
 	source = source or "unknown"
@@ -449,13 +488,43 @@ local function debounced_refresh(source)
 		refresh_timer = nil
 		last_refresh_time = vim.loop.now()
 		debug_log("timer executing refresh from: " .. source)
-		-- Only refresh if we're still in an oil buffer
-		if vim.bo.filetype == "oil" then
+		
+		-- Only refresh if oil buffer is ready
+		if is_oil_buffer_ready() then
 			apply_git_highlights()
 		else
-			debug_log("skipping refresh - not in oil buffer")
+			debug_log("skipping refresh - oil buffer not ready")
 		end
 	end)
+end
+
+-- Retry refresh with exponential backoff for race conditions
+local function retry_refresh(source, attempt)
+	attempt = attempt or 1
+	local max_attempts = 5
+	local base_delay = 50
+	
+	if attempt > max_attempts then
+		debug_log("retry_refresh: max attempts reached for " .. source)
+		return
+	end
+	
+	debug_log("retry_refresh: attempt " .. attempt .. " for " .. source)
+	
+	if is_oil_buffer_ready() then
+		debug_log("retry_refresh: oil ready, applying highlights")
+		apply_git_highlights()
+	else
+		-- Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
+		local delay = base_delay * (2 ^ (attempt - 1))
+		debug_log("retry_refresh: oil not ready, retrying in " .. delay .. "ms")
+		
+		vim.defer_fn(function()
+			if vim.bo.filetype == "oil" then
+				retry_refresh(source, attempt + 1)
+			end
+		end, delay)
+	end
 end
 
 -- Stop periodic refresh timer
@@ -506,7 +575,8 @@ local function setup_autocmds()
 		group = group,
 		callback = function()
 			if vim.bo.filetype == "oil" then
-				debounced_refresh("BufEnter-oil-filetype")
+				-- Use retry logic for initial load to handle race conditions
+				retry_refresh("BufEnter-oil-filetype")
 				start_periodic_refresh()
 			end
 		end,
@@ -549,6 +619,22 @@ local function setup_autocmds()
 		pattern = "oil://*",
 		callback = function(args)
 			debounced_refresh("BufWritePost/TextChanged:" .. args.event)
+		end,
+	})
+
+	-- Listen for when oil buffer content is actually loaded (catches race conditions)
+	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter" }, {
+		group = group,
+		callback = function(args)
+			if vim.bo.filetype == "oil" then
+				debug_log("BufReadPost/BufWinEnter - oil content loaded, triggering retry refresh")
+				-- Small delay to ensure oil has processed the content
+				vim.defer_fn(function()
+					if vim.bo.filetype == "oil" then
+						retry_refresh("BufReadPost/BufWinEnter:" .. args.event)
+					end
+				end, 25)
+			end
 		end,
 	})
 
@@ -636,13 +722,13 @@ function M.setup(opts)
 	initialize()
 	
 	-- If we're already in an oil buffer when setup is called (nvim . case),
-	-- trigger a refresh after a short delay
+	-- use retry logic to handle race conditions
 	vim.defer_fn(function()
 		if vim.bo.filetype == "oil" then
-			debug_log("Setup - already in oil buffer, triggering refresh")
-			debounced_refresh("setup-existing-oil-buffer")
+			debug_log("Setup - already in oil buffer, triggering retry refresh")
+			retry_refresh("setup-existing-oil-buffer")
 		end
-	end, 150)
+	end, 100)
 end
 
 -- Auto-initialize when oil buffer is entered (if not already done)
@@ -650,14 +736,13 @@ vim.api.nvim_create_autocmd("FileType", {
 	pattern = "oil",
 	callback = function()
 		initialize()
-		-- Trigger immediate refresh after initialization with a small delay
-		-- to ensure oil has fully loaded
+		-- Use retry logic to handle race conditions on initial load
 		vim.defer_fn(function()
 			if vim.bo.filetype == "oil" then
-				debug_log("FileType oil - triggering delayed refresh")
-				debounced_refresh("FileType-oil-delayed")
+				debug_log("FileType oil - triggering retry refresh")
+				retry_refresh("FileType-oil-delayed")
 			end
-		end, 100)
+		end, 50)
 	end,
 	group = vim.api.nvim_create_augroup("OilGitAutoInit", { clear = true }),
 })
