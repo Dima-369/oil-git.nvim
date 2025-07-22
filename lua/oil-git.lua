@@ -402,6 +402,7 @@ local function apply_git_highlights()
 				end
 				
 				-- Apply highlighting using extmarks (more reliable than matchaddpos)
+				debug_log("  BEFORE EXTMARK: name_start=" .. (name_start or "nil") .. ", name_end=" .. (name_end or "nil"))
 				if name_start and name_end then
 					local col_start = name_start - 1  -- 0-indexed for extmarks
 					local col_end = name_end  -- exclusive end
@@ -515,7 +516,7 @@ local function debounced_refresh(source)
 	-- Check cooldown period to prevent rapid-fire refreshes
 	local current_time = vim.loop.now()
 	if current_time - last_refresh_time < MIN_REFRESH_INTERVAL then
-		debug_log("skipping refresh - within cooldown period")
+		debug_log("skipping refresh - within cooldown period (" .. (current_time - last_refresh_time) .. "ms ago)")
 		return
 	end
 
