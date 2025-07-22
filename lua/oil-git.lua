@@ -20,6 +20,8 @@ local refresh_timer = nil
 local DEBOUNCE_MS = 50
 local last_refresh_time = 0
 local MIN_REFRESH_INTERVAL = 200 -- Minimum 200ms between actual refreshes
+local last_successful_refresh = 0
+local SUCCESSFUL_REFRESH_COOLDOWN = 1000 -- Don't refresh again for 1 second after success
 
 -- Periodic refresh for external changes (disabled by default to prevent cursor blinking)
 local periodic_timer = nil
@@ -401,7 +403,7 @@ local function apply_git_highlights()
 					end
 				end
 				
-				-- Apply highlighting using extmarks (more reliable than matchaddpos)
+				-- Applyo highlighting using extmarks (more reliable than matchaddpos)
 				debug_log("  BEFORE EXTMARK: name_start=" .. (name_start or "nil") .. ", name_end=" .. (name_end or "nil"))
 				if name_start and name_end then
 					local col_start = name_start - 1  -- 0-indexed for extmarks
@@ -527,12 +529,21 @@ local function debounced_refresh(source)
 
 	refresh_timer = vim.fn.timer_start(DEBOUNCE_MS, function()
 		refresh_timer = nil
-		last_refresh_time = vim.loop.now()
+		local timer_time = vim.loop.now()
+		last_refresh_time = timer_time
 		debug_log("timer executing refresh from: " .. source)
+		
+		-- Check successful refresh cooldown
+		if timer_time - last_successful_refresh < SUCCESSFUL_REFRESH_COOLDOWN then
+			debug_log("timer: skipping refresh - successful refresh " .. (timer_time - last_successful_refresh) .. "ms ago")
+			return
+		end
 		
 		-- Only refresh if oil buffer is ready
 		if is_oil_buffer_ready() then
 			apply_git_highlights()
+			last_successful_refresh = timer_time
+			debug_log("timer: SUCCESS - setting cooldown until " .. (timer_time + SUCCESSFUL_REFRESH_COOLDOWN))
 		else
 			debug_log("skipping refresh - oil buffer not ready")
 		end
@@ -550,11 +561,20 @@ local function retry_refresh(source, attempt)
 		return
 	end
 	
+	-- Check if we recently had a successful refresh
+	local current_time = vim.loop.now()
+	if current_time - last_successful_refresh < SUCCESSFUL_REFRESH_COOLDOWN then
+		debug_log("retry_refresh: skipping " .. source .. " - successful refresh " .. (current_time - last_successful_refresh) .. "ms ago")
+		return
+	end
+	
 	debug_log("retry_refresh: attempt " .. attempt .. " for " .. source)
 	
 	if is_oil_buffer_ready() then
 		debug_log("retry_refresh: oil ready, applying highlights")
 		apply_git_highlights()
+		last_successful_refresh = current_time
+		debug_log("retry_refresh: SUCCESS - setting cooldown until " .. (current_time + SUCCESSFUL_REFRESH_COOLDOWN))
 	else
 		-- Exponential backoff: 50ms, 100ms, 200ms, 400ms, 800ms
 		local delay = base_delay * (2 ^ (attempt - 1))
