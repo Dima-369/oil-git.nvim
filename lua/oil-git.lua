@@ -39,27 +39,31 @@ local DEBUG = false
 
 local function debug_log(msg, level)
 	if DEBUG then
-		vim.notify("[oil-git] " .. msg, level or vim.log.levels.INFO)
+		-- Use vim.print for less intrusive logging during startup
+		if vim.in_fast_event() or vim.v.vim_did_enter == 0 then
+			print("[oil-git] " .. msg)
+		else
+			vim.notify("[oil-git] " .. msg, level or vim.log.levels.INFO)
+		end
 	end
 end
 
 local function setup_highlights()
 	-- Only set highlight if it doesn't already exist (respects colorscheme)
-	debug_log("SETUP_HIGHLIGHTS: Setting up highlight groups")
+	if DEBUG then
+		debug_log("SETUP_HIGHLIGHTS: Setting up highlight groups")
+	end
+	
+	local created_count = 0
 	for name, opts in pairs(default_highlights) do
 		if vim.fn.hlexists(name) == 0 then
 			vim.api.nvim_set_hl(0, name, opts)
-			debug_log("  Created highlight group: " .. name)
-		else
-			debug_log("  Highlight group already exists: " .. name)
+			created_count = created_count + 1
 		end
 	end
 	
-	-- Verify directory highlight groups specifically
-	local dir_groups = {"OilGitDirAdded", "OilGitDirModified", "OilGitDirRenamed", "OilGitDirUntracked", "OilGitDirIgnored"}
-	for _, group in ipairs(dir_groups) do
-		local exists = vim.fn.hlexists(group) == 1
-		debug_log("  Directory highlight group " .. group .. ": " .. (exists and "EXISTS" or "MISSING"))
+	if DEBUG and created_count > 0 then
+		debug_log("Created " .. created_count .. " highlight groups")
 	end
 end
 
@@ -755,6 +759,10 @@ local function initialize()
 	setup_highlights()
 	setup_autocmds()
 	initialized = true
+	
+	if DEBUG then
+		debug_log("oil-git initialized")
+	end
 end
 
 function M.setup(opts)
@@ -786,7 +794,9 @@ function M.setup(opts)
 	-- use retry logic to handle race conditions
 	vim.defer_fn(function()
 		if vim.bo.filetype == "oil" then
-			debug_log("Setup - already in oil buffer, triggering retry refresh")
+			if DEBUG then
+				debug_log("Setup - already in oil buffer, triggering retry refresh")
+			end
 			retry_refresh("setup-existing-oil-buffer")
 		end
 	end, 100)
