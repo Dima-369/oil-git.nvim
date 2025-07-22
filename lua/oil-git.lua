@@ -34,7 +34,7 @@ local last_refresh_state = {
 
 -- Debug flag - configurable via setup options
 local DEBUG = false
-
+oeu
 local function debug_log(msg, level)
 	if DEBUG then
 		vim.notify("[oil-git] " .. msg, level or vim.log.levels.INFO)
@@ -308,7 +308,8 @@ local function apply_git_highlights()
 			local hl_group, symbol = get_highlight_group(status_code, is_directory)
 
 			if hl_group and symbol then
-				debug_log("Processing entry: '" .. entry.name .. "' in line: '" .. line .. "'")
+				debug_log("Processing entry: '" .. entry.name .. "' (type: " .. entry.type .. ") in line: '" .. line .. "'")
+				debug_log("  Status code: " .. (status_code or "none") .. ", Highlight: " .. hl_group .. ", Symbol: " .. symbol)
 				
 				-- Use a more robust approach to find and highlight filenames
 				-- This works regardless of how oil formats the filename (with or without quotes, spaces, etc.)
@@ -322,6 +323,13 @@ local function apply_git_highlights()
 					'"' .. entry.name .. '"',  -- quoted
 					"'" .. entry.name .. "'",  -- single quoted
 				}
+				
+				-- For directories, also try with trailing slash
+				if is_directory then
+					table.insert(display_patterns, entry.name .. "/")
+					table.insert(display_patterns, '"' .. entry.name .. '/"')
+					table.insert(display_patterns, "'" .. entry.name .. "/'")
+				end
 				
 				for _, pattern in ipairs(display_patterns) do
 					local start_pos = line:find(pattern, 1, true)
@@ -344,11 +352,18 @@ local function apply_git_highlights()
 					local content_start = line:find("%S")
 					if content_start then
 						-- Look for filename-like content starting from there
-						local filename_pattern = "[%w%s%.%-_]+"
+						local filename_pattern = "[%w%s%.%-_/]+"  -- Include slash for directories
 						local match_start, match_end = line:find(filename_pattern, content_start)
-						if match_start and line:sub(match_start, match_end):find(entry.name:gsub(" ", ".*")) then
-							name_start = match_start
-							name_end = match_end
+						if match_start then
+							local matched_text = line:sub(match_start, match_end)
+							-- Check if the matched text contains our entry name
+							local escaped_name = entry.name:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+							local pattern_name = escaped_name:gsub(" ", ".*")
+							if matched_text:find(pattern_name) then
+								name_start = match_start
+								name_end = match_end
+								debug_log("Method 2 found: '" .. matched_text .. "' for entry: '" .. entry.name .. "'")
+							end
 						end
 					end
 				end
